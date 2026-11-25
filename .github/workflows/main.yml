@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Web Game to Android APK
 
 on:
   push:
@@ -15,40 +15,40 @@ jobs:
     - name: Unzip project
       run: unzip -o "*.zip" -d project_files
 
-    - name: Find Gradle root directory
-      id: find_gradle
-      run: |
-        GRADLE_FILE=$(find project_files -maxdepth 3 \( -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts" \) | head -n 1)
-        if [ -z "$GRADLE_FILE" ]; then
-          echo "Error: No Gradle project found inside the zip!"
-          ls -laR project_files
-          exit 1
-        fi
-        GRADLE_DIR=$(dirname "$GRADLE_FILE")
-        echo "Found Gradle project in: $GRADLE_DIR"
-        echo "dir=$GRADLE_DIR" >> $GITHUB_OUTPUT
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
 
-    - name: Set up JDK 21
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '21'
+        java-version: '17'
         distribution: 'temurin'
 
-    - name: Generate debug.keystore
-      working-directory: ${{ steps.find_gradle.outputs.dir }}
-      run: keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+    - name: Install Bun
+      uses: oven-sh/setup-bun@v1
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-      with:
-        gradle-version: '9.3.1'
+    - name: Install dependencies & Build Web
+      working-directory: ./project_files
+      run: |
+        bun install
+        bun run build
 
-    - name: Build with Gradle
-      working-directory: ${{ steps.find_gradle.outputs.dir }}
-      run: gradle assembleDebug
+    - name: Add Capacitor Android Platform
+      working-directory: ./project_files
+      run: |
+        npm install @capacitor/core @capacitor/cli @capacitor/android
+        npx cap init "Tactical BattleGrounds" "com.tactical.battlegrounds" --web-dir dist
+        npx cap add android
+        npx cap copy android
+
+    - name: Build APK with Gradle
+      working-directory: ./project_files/android
+      run: ./gradlew assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Tactical-BattleGrounds-APK
-        path: ${{ steps.find_gradle.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
+        path: project_files/android/app/build/outputs/apk/debug/app-debug.apk
