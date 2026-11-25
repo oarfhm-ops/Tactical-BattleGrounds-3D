@@ -15,6 +15,19 @@ jobs:
     - name: Unzip project
       run: unzip -o "*.zip" -d project_files
 
+    - name: Find Gradle root directory
+      id: find_gradle
+      run: |
+        GRADLE_FILE=$(find project_files -maxdepth 3 \( -name "settings.gradle" -o -name "settings.gradle.kts" -o -name "build.gradle" -o -name "build.gradle.kts" \) | head -n 1)
+        if [ -z "$GRADLE_FILE" ]; then
+          echo "Error: No Gradle project found inside the zip!"
+          ls -laR project_files
+          exit 1
+        fi
+        GRADLE_DIR=$(dirname "$GRADLE_FILE")
+        echo "Found Gradle project in: $GRADLE_DIR"
+        echo "dir=$GRADLE_DIR" >> $GITHUB_OUTPUT
+
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
@@ -22,7 +35,7 @@ jobs:
         distribution: 'temurin'
 
     - name: Generate debug.keystore
-      working-directory: ./project_files
+      working-directory: ${{ steps.find_gradle.outputs.dir }}
       run: keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
     - name: Setup Gradle
@@ -31,11 +44,11 @@ jobs:
         gradle-version: '9.3.1'
 
     - name: Build with Gradle
-      working-directory: ./project_files
+      working-directory: ${{ steps.find_gradle.outputs.dir }}
       run: gradle assembleDebug
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: Dera3-App-APK
-        path: project_files/app/build/outputs/apk/debug/app-debug.apk
+        name: Tactical-BattleGrounds-APK
+        path: ${{ steps.find_gradle.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
